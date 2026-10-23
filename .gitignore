@@ -5,3 +5,8 @@ token.json
 __pycache__/
 *.pyc
 .DS_Store
+venv/
+config/token.json
+config/credentials.json
+.env
+serviceaccount.json

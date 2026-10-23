@@ -1,18 +1,13 @@
-import httpx
-from config import settings
+import subprocess
+import platform
 
-class TelegramNotifier:
-    def __init__(self):
-        self.token = settings.TELEGRAM_BOT_TOKEN
-        self.chat_id = settings.TELEGRAM_CHAT_ID
-
-    async def send_message(self, message: str):
-        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        payload = {
-            "chat_id": self.chat_id,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
+class AudioNotifier:
+    @staticmethod
+    def play_alert_sound(sound_name="Glass"):
+        """Plays a native macOS system sound or notification chime."""
+        if platform.system() == "Darwin":  # macOS
+            # Available macOS sounds: Glass, Ping, Purr, Sosumi, Bottle, Funk
+            sound_path = f"/System/Library/Sounds/{sound_name}.aiff"
+            subprocess.run(["afplay", sound_path])
+        else:
+            print("🔊 *Alert Ringtone Triggered!*")

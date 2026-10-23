@@ -43,35 +43,47 @@ class GoogleDataFetcher:
         return {"emails": emails, "calendar": calendar_events, "tasks": tasks}
 
     def _fetch_emails(self):
-        service = build('gmail', 'v1', credentials=self.creds)
-        results = service.users().messages().list(userId='me', q='is:unread label:INBOX', maxResults=15).execute()
-        messages = results.get('messages', [])
-        
-        email_data = []
-        for msg in messages:
-            txt = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['From', 'Subject', 'Date']).execute()
-            headers = txt.get('payload', {}).get('headers', [])
-            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-            email_data.append({"sender": sender, "subject": subject})
-        return email_data
+        try:
+            service = build('gmail', 'v1', credentials=self.creds)
+            results = service.users().messages().list(userId='me', q='is:unread label:INBOX', maxResults=15).execute()
+            messages = results.get('messages', [])
+            
+            email_data = []
+            for msg in messages:
+                txt = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['From', 'Subject', 'Date']).execute()
+                headers = txt.get('payload', {}).get('headers', [])
+                subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+                sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
+                email_data.append({"sender": sender, "subject": subject})
+            return email_data
+        except Exception as e:
+            print(f"⚠️ Warning: Gmail API notice ({e}). Skipping...")
+            return []
 
     def _fetch_calendar(self):
-        service = build('calendar', 'v3', credentials=self.creds)
-        now = datetime.datetime.utcnow().isoformat() + 'Z'
-        end_of_day = datetime.datetime.utcnow().replace(hour=23, minute=59, second=59).isoformat() + 'Z'
-        
-        events_result = service.events().list(
-            calendarId='primary', timeMin=now, timeMax=end_of_day,
-            singleEvents=True, orderBy='startTime').execute()
-        return events_result.get('items', [])
+        try:
+            service = build('calendar', 'v3', credentials=self.creds)
+            now = datetime.datetime.utcnow().isoformat() + 'Z'
+            end_of_day = datetime.datetime.utcnow().replace(hour=23, minute=59, second=59).isoformat() + 'Z'
+            
+            events_result = service.events().list(
+                calendarId='primary', timeMin=now, timeMax=end_of_day,
+                singleEvents=True, orderBy='startTime').execute()
+            return events_result.get('items', [])
+        except Exception as e:
+            print(f"⚠️ Warning: Calendar API notice ({e}). Skipping...")
+            return []
 
     def _fetch_tasks(self):
-        service = build('tasks', 'v1', credentials=self.creds)
-        tasklists = service.tasklists().list(maxResults=5).execute()
-        all_tasks = []
-        for tl in tasklists.get('items', []):
-            tasks = service.tasks().list(tasklist=tl['id'], showCompleted=False).execute()
-            for t in tasks.get('items', []):
-                all_tasks.append({"title": t.get('title'), "due": t.get('due')})
-        return all_tasks
+        try:
+            service = build('tasks', 'v1', credentials=self.creds)
+            tasklists = service.tasklists().list(maxResults=5).execute()
+            all_tasks = []
+            for tl in tasklists.get('items', []):
+                tasks = service.tasks().list(tasklist=tl['id'], showCompleted=False).execute()
+                for t in tasks.get('items', []):
+                    all_tasks.append({"title": t.get('title'), "due": t.get('due')})
+            return all_tasks
+        except Exception as e:
+            print(f"⚠️ Warning: Tasks API notice ({e}). Skipping...")
+            return []
