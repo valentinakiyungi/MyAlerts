@@ -1,10 +1,20 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from services.google_client import GoogleDataFetcher
 from services.ai_agent import AIAgentEngine
 from services.notifier import AudioNotifier
 
 app = FastAPI(title="MyAlert Cloud Agent", version="1.0.0")
+
+# Enable CORS so your GitHub Pages frontend can talk to this backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (or you can restrict to your github.io domain)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def health_check():
