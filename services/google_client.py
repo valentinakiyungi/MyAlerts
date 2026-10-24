@@ -7,12 +7,12 @@ class GoogleDataFetcher:
         self.token_path = settings.TOKEN_PATH
 
     async def fetch_all_context(self) -> dict:
-        """Fetch context safely, falling back if running headless in the cloud without local OAuth tokens."""
+        """Fetch context safely, falling back if running in the cloud without local OAuth credentials."""
         if not os.path.exists(self.credentials_path) or not os.path.exists(self.token_path):
             print("Warning: Google OAuth credentials not found in cloud environment. Using cloud fallback context.")
             return {
                 "source": "Cloud Fallback",
-                "message": "MyAlert is running 24/7 in the cloud. Local OAuth files (credentials.json) are restricted to local desktop execution."
+                "message": "MyAlert is running 24/7 in the cloud. Local OAuth desktop files (credentials.json) are not present, operating in cloud-safe mode."
             }
         
         try:
@@ -32,7 +32,7 @@ class GoogleDataFetcher:
                 else:
                     return {
                         "source": "Cloud Fallback",
-                        "message": "OAuth token is invalid or expired, and interactive browser login is unavailable in headless cloud."
+                        "message": "OAuth token is invalid or expired."
                     }
             
             return {
