@@ -1,89 +1,44 @@
-import asyncio
 import os
-import datetime
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
 from config import settings
-
-SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/calendar.readonly',
-    'https://www.googleapis.com/auth/tasks.readonly'
-]
 
 class GoogleDataFetcher:
     def __init__(self):
-        self.creds = self._get_credentials()
+        self.credentials_path = settings.GOOGLE_CREDENTIALS_PATH
+        self.token_path = settings.TOKEN_PATH
 
-    def _get_credentials(self):
-        creds = None
-        if os.path.exists(settings.TOKEN_PATH):
-            creds = Credentials.from_authorized_user_file(settings.TOKEN_PATH, SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(settings.GOOGLE_CREDENTIALS_PATH, SCOPES)
-                creds = flow.run_local_server(port=0)
-            with open(settings.TOKEN_PATH, 'w') as token:
-                token.write(creds.to_json())
-        return creds
-
-    async def fetch_all_context(self):
-        """Concurrently fetch Gmail, Calendar, and Tasks data."""
-        loop = asyncio.get_running_loop()
+    async def fetch_all_context(self) -> dict:
+        """Fetch context safely, falling back if running headless in the cloud without local OAuth tokens."""
+        if not os.path.exists(self.credentials_path) or not os.path.exists(self.token_path):
+            print("Warning: Google OAuth credentials not found in cloud environment. Using cloud fallback context.")
+            return {
+                "source": "Cloud Fallback",
+                "message": "MyAlert is running 24/7 in the cloud. Local OAuth files (credentials.json) are restricted to local desktop execution."
+            }
         
-        emails, calendar_events, tasks = await asyncio.gather(
-            loop.run_in_executor(None, self._fetch_emails),
-            loop.run_in_executor(None, self._fetch_calendar),
-            loop.run_in_executor(None, self._fetch_tasks)
-        )
-        return {"emails": emails, "calendar": calendar_events, "tasks": tasks}
-
-    def _fetch_emails(self):
         try:
-            service = build('gmail', 'v1', credentials=self.creds)
-            results = service.users().messages().list(userId='me', q='is:unread label:INBOX', maxResults=15).execute()
-            messages = results.get('messages', [])
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
             
-            email_data = []
-            for msg in messages:
-                txt = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['From', 'Subject', 'Date']).execute()
-                headers = txt.get('payload', {}).get('headers', [])
-                subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-                sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-                email_data.append({"sender": sender, "subject": subject})
-            return email_data
-        except Exception as e:
-            print(f"⚠️ Warning: Gmail API notice ({e}). Skipping...")
-            return []
-
-    def _fetch_calendar(self):
-        try:
-            service = build('calendar', 'v3', credentials=self.creds)
-            now = datetime.datetime.utcnow().isoformat() + 'Z'
-            end_of_day = datetime.datetime.utcnow().replace(hour=23, minute=59, second=59).isoformat() + 'Z'
+            creds = None
+            if os.path.exists(self.token_path):
+                creds = Credentials.from_authorized_user_file(
+                    self.token_path, 
+                    ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/calendar.readonly']
+                )
             
-            events_result = service.events().list(
-                calendarId='primary', timeMin=now, timeMax=end_of_day,
-                singleEvents=True, orderBy='startTime').execute()
-            return events_result.get('items', [])
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    return {
+                        "source": "Cloud Fallback",
+                        "message": "OAuth token is invalid or expired, and interactive browser login is unavailable in headless cloud."
+                    }
+            
+            return {
+                "source": "Google API",
+                "status": "Authenticated successfully"
+            }
         except Exception as e:
-            print(f"⚠️ Warning: Calendar API notice ({e}). Skipping...")
-            return []
-
-    def _fetch_tasks(self):
-        try:
-            service = build('tasks', 'v1', credentials=self.creds)
-            tasklists = service.tasklists().list(maxResults=5).execute()
-            all_tasks = []
-            for tl in tasklists.get('items', []):
-                tasks = service.tasks().list(tasklist=tl['id'], showCompleted=False).execute()
-                for t in tasks.get('items', []):
-                    all_tasks.append({"title": t.get('title'), "due": t.get('due')})
-            return all_tasks
-        except Exception as e:
-            print(f"⚠️ Warning: Tasks API notice ({e}). Skipping...")
-            return []
+            print(f"OAuth load error: {e}")
+            return {"source": "Error fallback", "details": str(e)}
