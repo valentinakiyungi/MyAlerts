@@ -1,16 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
+import traceback
 from services.google_client import GoogleDataFetcher
 from services.ai_agent import AIAgentEngine
 from services.notifier import AudioNotifier
 
 app = FastAPI(title="MyAlert Cloud Agent", version="1.0.0")
 
-# Enable CORS so your GitHub Pages frontend can talk to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins (or you can restrict to your github.io domain)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,12 +28,16 @@ async def get_briefing():
         agent = AIAgentEngine()
         briefing_markdown = await agent.generate_briefing(raw_context)
         
-        # In cloud mode, play sound locally if supported or log webhook event
-        AudioNotifier.play_alert_sound("Glass")
+        # Bypassed AudioNotifier for cloud Linux container compatibility
         
         return {
             "status": "success",
             "briefing": briefing_markdown
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_details = traceback.format_exc()
+        print("ERROR IN BRIEFING:", error_details)
+        return {
+            "status": "error",
+            "briefing": f"Backend Exception:\n{str(e)}\n\nTraceback:\n{error_details}"
+        }
